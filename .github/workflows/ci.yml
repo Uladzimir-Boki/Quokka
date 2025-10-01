@@ -1,0 +1,77 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    tags:
+      - 'dev-v*'
+
+env:
+  GCP_PROJECT_ID: ${{ secrets.GCP_PROJECT_ID }}
+  GKE_LOCATION: us-central1
+  REPOSITORY_NAME: quokka-image-repository
+  IMAGE_NAME: quokka
+  CHART_REPO: USERNAME/helm-gitops-repo 
+  CHART_PATH: charts/your-app-name/values.yaml
+
+jobs:
+  build-and-update:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Application Code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          
+      - name: Set Image Tag
+        id: set_tag
+        run: echo "IMAGE_TAG=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
+
+      - name: Configure Docker to use gcloud CLI
+        run: gcloud auth configure-docker ${GKE_LOCATION}-docker.pkg.dev
+
+      - name: Build and Push Docker Image
+        run: |
+          docker build -t ${GKE_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPOSITORY_NAME}/${IMAGE_NAME}:${{ steps.set_tag.outputs.IMAGE_TAG }} .
+          docker push ${GKE_LOCATION}-docker.pkg.dev/${GCP_PROJECT_ID}/${REPOSITORY_NAME}/${IMAGE_NAME}:${{ steps.set_tag.outputs.IMAGE_TAG }}
+        
+      # --- Шаг 3: Обновление Helm-чарта в другом репозитории ---
+      
+      # - name: Checkout Helm Chart Repository
+      #   uses: actions/checkout@v4
+      #   with:
+      #     repository: ${{ env.CHART_REPO }}
+      #     path: chart_repo # Клонируем в подкаталог
+      #     # Используем Personal Access Token с правами 'repo' для пуша в другой репозиторий
+      #     token: ${{ secrets.CHART_REPO_ACCESS_TOKEN }} # Настройте этот секрет!
+
+      # - name: Update Helm Chart values.yaml
+      #   id: update_chart
+      #   run: |
+      #     # Используем sed для замены тега в values.yaml
+      #     # Заменит 'tag: "старый-тег"' на 'tag: "новый-тег"'
+      #     sed -i "s|tag: \".*\"|tag: \"${{ steps.set_tag.outputs.IMAGE_TAG }}\"|g" chart_repo/${{ env.CHART_PATH }}
+          
+      #     # Проверяем, были ли изменения
+      #     cd chart_repo
+      #     if git diff --exit-code ${{ env.CHART_PATH }}; then
+      #       echo "No changes in values.yaml, skipping commit."
+      #       echo "CHANGED=false" >> $GITHUB_OUTPUT
+      #     else
+      #       echo "Changes detected, proceeding with commit."
+      #       echo "CHANGED=true" >> $GITHUB_OUTPUT
+      #     fi
+        
+      # - name: Commit and Push Changes
+      #   if: steps.update_chart.outputs.CHANGED == 'true'
+      #   run: |
+      #     cd chart_repo
+      #     git config user.name "github-actions[bot]"
+      #     git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+      #     git add ${{ env.CHART_PATH }}
+      #     git commit -m "chore(gitops): update image tag to ${{ steps.set_tag.outputs.IMAGE_TAG }} for ${{ env.IMAGE_NAME }}"
+      #     git push origin main # Или ваш default branch
