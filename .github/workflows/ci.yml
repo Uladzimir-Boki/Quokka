@@ -53,11 +53,10 @@ jobs:
         run: |
           # Используем sed для замены тега в values.yaml
           # Заменит 'tag: "старый-тег"' на 'tag: "новый-тег"'
-          sed -i "s|tag: \".*\"|tag: \"${{ steps.set_tag.outputs.IMAGE_TAG }}\"|g" Quokka-helm-gitops/${{ env.CHART_PATH }}
+          sed -i "s|tag: .*|tag: ${{ steps.set_tag.outputs.IMAGE_TAG }}|g" Quokka-helm-gitops/${{ env.CHART_PATH }}
           
           # Проверяем, были ли изменения
           cd Quokka-helm-gitops
-          git diff --exit-code ${{ env.CHART_PATH }}
           if git diff --exit-code ${{ env.CHART_PATH }}; then
             echo "No changes in values.yaml, skipping commit."
             echo "CHANGED=false" >> $GITHUB_OUTPUT
