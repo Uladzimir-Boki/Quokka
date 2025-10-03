@@ -57,6 +57,7 @@ jobs:
           
           # Проверяем, были ли изменения
           cd Quokka-helm-gitops
+          git diff --exit-code ${{ env.CHART_PATH }}
           if git diff --exit-code ${{ env.CHART_PATH }}; then
             echo "No changes in values.yaml, skipping commit."
             echo "CHANGED=false" >> $GITHUB_OUTPUT
